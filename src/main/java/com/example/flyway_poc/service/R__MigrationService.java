@@ -12,8 +12,7 @@ import javax.sql.rowset.RowSetFactory;
 import javax.sql.rowset.RowSetProvider;
 import java.sql.ResultSet;
 import java.sql.Statement;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 
 @Configuration
 @Service
@@ -52,6 +51,12 @@ public class R__MigrationService extends BaseJavaMigration {
     @Value("${mysql.joinQuery}")
     String joinQuery;
 
+    @Value("${table.sourceUUID}")
+    String sourceUuid;
+
+    @Value("${table.targetUUID}")
+    String targetUuid;
+
     @Override
     public void migrate(Context context) throws Exception {
         final long migrationStartTime = System.currentTimeMillis();
@@ -60,6 +65,7 @@ public class R__MigrationService extends BaseJavaMigration {
         Statement insertMappingStmt = context.getConnection().createStatement();
         Statement insertUserStmt = context.getConnection().createStatement();
         Statement insertUODStmt = context.getConnection().createStatement();
+        Statement insertUuidStmt = context.getConnection().createStatement();
 
         //Fetching last record's ID
         int targetLastId = targetIdService.getLastId(context, target,user_id);
@@ -138,7 +144,8 @@ public class R__MigrationService extends BaseJavaMigration {
             String	product_type= joinTableRows.getString(22);
             String	parent_id= joinTableRows.getString(23);
             String	age= joinTableRows.getString(24);
-            String	address= joinTableRows.getString(25).replace("'","''");
+//            String	address= joinTableRows.getString(25).replace("'","''");
+            String	address="";
             String	ip= joinTableRows.getString(26);
             String subscribe_me= joinTableRows.getString(27);
             String	allowed_email_category= joinTableRows.getString(28);
@@ -194,6 +201,37 @@ public class R__MigrationService extends BaseJavaMigration {
                         + " ('" + targetForeignLastId++ + "','" + targetLastId + "','" + key_name + "','" + value + "','" + created_date + "')");
             }
         }
+
+        final long MigrateUuidTime = System.currentTimeMillis() ;
+
+        ResultSet source_uuid = fetchRowService.getResultSet(context,sourceUuid);
+        ResultSet target_uuid = fetchRowService.getResultSet(context,targetUuid);
+
+        Set<String> target_uuid_set= new HashSet<>();
+
+        while(target_uuid.next()){
+            target_uuid_set.add(target_uuid.getString(3));
+        }
+
+        while (source_uuid.next()){
+            int id = source_uuid.getInt(1);
+            int user_id = source_uuid.getInt(2);
+            String uuid= source_uuid.getString(3);
+            String platform= source_uuid.getString(4);;
+            int status= source_uuid.getInt(5);
+            String created_on = source_uuid.getString(6);
+            String updated_on = source_uuid.getString(7);
+
+            if(!target_uuid_set.contains(uuid)) {
+                insertUuidStmt.execute("insert into Target.user_uuid"
+                        + " (id,user_id,uuid,platform,status,created_on,updated_on) values"
+                        + " ('" + id + "','" + user_id + "','" + uuid + "','" + platform + "','" + status + "','" + created_on + "','" + updated_on + "')");
+            }
+            target_uuid_set.add(source_uuid.getString(3));
+        }
+        final long Latency = System.currentTimeMillis() - MigrateUuidTime ;
+        System.out.println("UUID Migrate Time: " + Latency);
+
         System.out.println("---Migration Completed---");
         final long migrationLatency = System.currentTimeMillis() - migrationStartTime ;
         System.out.println("Total Migration Time: " + migrationLatency);
