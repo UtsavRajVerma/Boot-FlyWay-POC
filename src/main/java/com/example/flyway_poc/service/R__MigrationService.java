@@ -65,7 +65,7 @@ public class R__MigrationService extends BaseJavaMigration {
         int targetLastId = targetIdService.getLastId(context, target,user_id);
 
         int targetForeignLastId = targetIdService.getLastId(context, targetForeign,id);
-        targetForeignLastId++;
+        if(targetForeignLastId==0) targetForeignLastId++;
 
         int userMappingLast = targetIdService.getLastId(context,userMapping,serial_no);
         userMappingLast++;
@@ -191,7 +191,7 @@ public class R__MigrationService extends BaseJavaMigration {
 
                 insertUODStmt.execute("insert into Target.user_other_details"
                         + " (id,user_id,key_name, value,created_date) values"
-                        + " ('" + targetForeignLastId++ + "','" + targetLastId + "','" + key_name + "','" + value + "','" + created_date + "')");
+                        + " ('" + targetForeignLastId++ + "','" + user_id + "','" + key_name + "','" + value + "','" + created_date + "')");
             }
         }
         System.out.println("---Migration Completed---");
