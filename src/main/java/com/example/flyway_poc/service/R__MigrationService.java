@@ -65,7 +65,7 @@ public class R__MigrationService extends BaseJavaMigration {
         int targetLastId = targetIdService.getLastId(context, target,user_id);
 
         int targetForeignLastId = targetIdService.getLastId(context, targetForeign,id);
-        if(targetForeignLastId==0) targetForeignLastId++;
+        targetForeignLastId++;
 
         int userMappingLast = targetIdService.getLastId(context,userMapping,serial_no);
         userMappingLast++;
