@@ -6,7 +6,7 @@ import org.springframework.context.annotation.PropertySource;
 import javax.persistence.*;
 @Entity
 @Data
-@Table(name = "source_table",schema = "Source")
+@Table(name = "user",schema = "Source")
 public class SourceUser {
     @Id
     @GeneratedValue(strategy= GenerationType.IDENTITY)

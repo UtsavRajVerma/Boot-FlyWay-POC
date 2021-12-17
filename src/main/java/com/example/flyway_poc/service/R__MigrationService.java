@@ -5,17 +5,16 @@ import org.flywaydb.core.api.migration.Context;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.stereotype.Service;
 
 import javax.sql.rowset.CachedRowSet;
 import javax.sql.rowset.RowSetFactory;
 import javax.sql.rowset.RowSetProvider;
 import java.sql.ResultSet;
 import java.sql.Statement;
-import java.util.*;
+import java.util.HashMap;
+import java.util.Map;
 
 @Configuration
-@Service
 public class R__MigrationService extends BaseJavaMigration {
 
     @Autowired
@@ -23,6 +22,9 @@ public class R__MigrationService extends BaseJavaMigration {
 
     @Autowired
     FetchRowService fetchRowService;
+
+    @Autowired
+    UuidService uuidService;
 
     @Value("${table.target}")
      String target;
@@ -51,23 +53,22 @@ public class R__MigrationService extends BaseJavaMigration {
     @Value("${mysql.joinQuery}")
     String joinQuery;
 
-    @Value("${table.sourceUUID}")
-    String sourceUuid;
-
-    @Value("${table.targetUUID}")
-    String targetUuid;
-
     @Override
     public void migrate(Context context) throws Exception {
         final long migrationStartTime = System.currentTimeMillis();
 
-        //Creating Statement Objects
+
+        /**
+         * Creating Statement Objects
+         */
         Statement insertMappingStmt = context.getConnection().createStatement();
         Statement insertUserStmt = context.getConnection().createStatement();
         Statement insertUODStmt = context.getConnection().createStatement();
-        Statement insertUuidStmt = context.getConnection().createStatement();
 
-        //Fetching last record's ID
+
+        /**
+         * Fetching last record's ID
+         */
         int targetLastId = targetIdService.getLastId(context, target,user_id);
 
         int targetForeignLastId = targetIdService.getLastId(context, targetForeign,id);
@@ -76,9 +77,10 @@ public class R__MigrationService extends BaseJavaMigration {
         int userMappingLast = targetIdService.getLastId(context,userMapping,serial_no);
         userMappingLast++;
 
-        //Join Query & Establishing Connection
-        final long connectionStartTime = System.currentTimeMillis();
 
+        /**
+         * Join Query & Establishing Connection
+         */
         RowSetFactory factory = RowSetProvider.newFactory();
         CachedRowSet joinTableRows = factory.createCachedRowSet();
 
@@ -89,12 +91,10 @@ public class R__MigrationService extends BaseJavaMigration {
         joinTableRows.setCommand(joinQuery);
         joinTableRows.execute();
 
-        final long connectionLatency = System.currentTimeMillis() - connectionStartTime;
-        System.out.println("###- Build Connection & Join Query Execution Time -###: "+connectionLatency);
 
-        //Creating & Filling HashMaps
-        final long mapFillStartTime =System.currentTimeMillis();
-
+        /**
+         * Creating & Filling HashMaps
+         */
         ResultSet source_uod = fetchRowService.getResultSet(context,sourceForeign);
         Map<Integer,Integer> source_uod_map = new HashMap<>();
         while (source_uod.next()){
@@ -113,11 +113,13 @@ public class R__MigrationService extends BaseJavaMigration {
             userMap.put(userMappingResultSet.getInt(2),userMappingResultSet.getInt(3));
         }
 
-        final long mapFillLatency = System.currentTimeMillis() - mapFillStartTime ;
-        System.out.println("$$$- Previous User Mapping Fetch Time -$$$: "+mapFillLatency);
+        boolean duplicateValues=true;
 
-        //Migration Logic
-        System.out.println("Migrating Data...");
+
+        /**
+         * Migration Logic
+         */
+        System.out.println("Working. Trying to migrate script data...");
         while (joinTableRows.next()) {
 
             int user_id = joinTableRows.getInt(1);
@@ -144,8 +146,7 @@ public class R__MigrationService extends BaseJavaMigration {
             String	product_type= joinTableRows.getString(22);
             String	parent_id= joinTableRows.getString(23);
             String	age= joinTableRows.getString(24);
-//            String	address= joinTableRows.getString(25).replace("'","''");
-            String	address="";
+            String	address= joinTableRows.getString(25).replace("'","''");
             String	ip= joinTableRows.getString(26);
             String subscribe_me= joinTableRows.getString(27);
             String	allowed_email_category= joinTableRows.getString(28);
@@ -168,6 +169,7 @@ public class R__MigrationService extends BaseJavaMigration {
 
             if (!userMap.containsKey(user_id)) {
                 targetLastId++;
+                duplicateValues=false;
 
                 userMap.put(user_id, targetLastId);
 
@@ -198,42 +200,30 @@ public class R__MigrationService extends BaseJavaMigration {
 
                 insertUODStmt.execute("insert into Target.user_other_details"
                         + " (id,user_id,key_name, value,created_date) values"
-                        + " ('" + targetForeignLastId++ + "','" + targetLastId + "','" + key_name + "','" + value + "','" + created_date + "')");
+                        + " ('" + targetForeignLastId++ + "','" + user_id + "','" + key_name + "','" + value + "','" + created_date + "')");
             }
         }
+        if(duplicateValues) System.out.println("-> MIGRATION NOT REQUIRED. ALL DUPLICATE VALUES FOUND IN THE SCRIPT!!!");
+        else System.out.println("---Script Migration Completed---");
 
-        final long MigrateUuidTime = System.currentTimeMillis() ;
 
-        ResultSet source_uuid = fetchRowService.getResultSet(context,sourceUuid);
-        ResultSet target_uuid = fetchRowService.getResultSet(context,targetUuid);
+        /**
+         * Isolated Migration Calls
+         */
+        final long isolatedStartTime = System.currentTimeMillis() ;
+        System.out.println("#$$ Migrating isolated tables $$#");
 
-        Set<String> target_uuid_set= new HashSet<>();
 
-        while(target_uuid.next()){
-            target_uuid_set.add(target_uuid.getString(3));
-        }
+        /**
+         * user_uuid Table
+         */
+        uuidService.migrateUuidTable(context);
 
-        while (source_uuid.next()){
-            int id = source_uuid.getInt(1);
-            int user_id = source_uuid.getInt(2);
-            String uuid= source_uuid.getString(3);
-            String platform= source_uuid.getString(4);;
-            int status= source_uuid.getInt(5);
-            String created_on = source_uuid.getString(6);
-            String updated_on = source_uuid.getString(7);
+        final long IsolatedLatency = System.currentTimeMillis() - isolatedStartTime ;
+        System.out.println("All Isolated Tables Migrate Time: " + IsolatedLatency);
 
-            if(!target_uuid_set.contains(uuid)) {
-                insertUuidStmt.execute("insert into Target.user_uuid"
-                        + " (id,user_id,uuid,platform,status,created_on,updated_on) values"
-                        + " ('" + id + "','" + user_id + "','" + uuid + "','" + platform + "','" + status + "','" + created_on + "','" + updated_on + "')");
-            }
-            target_uuid_set.add(source_uuid.getString(3));
-        }
-        final long Latency = System.currentTimeMillis() - MigrateUuidTime ;
-        System.out.println("UUID Migrate Time: " + Latency);
-
-        System.out.println("---Migration Completed---");
         final long migrationLatency = System.currentTimeMillis() - migrationStartTime ;
         System.out.println("Total Migration Time: " + migrationLatency);
+        System.out.println("---Migration Completed---");
     }
 }

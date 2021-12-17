@@ -7,14 +7,14 @@ import javax.persistence.*;
 
 @Data
 @Entity
-@Table(name = "source_foreign",schema = "Source")
+@Table(name = "user_other_details",schema = "Source")
 public class SourceUOD {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private int id;
 
-    private int user_id_uod;
+    private int user_id;
 
     private String key_name;
 
